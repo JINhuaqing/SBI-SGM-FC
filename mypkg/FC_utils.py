@@ -21,7 +21,7 @@ def build_fc_freq_m(brain, params , freqrange):
         model_out, _, _, _ = nt.network_transfer_local_alpha(brain , params, cur_freq)
         # No noise matrix P(\omega) explicitly used here
         cur_estFC = np.matmul(model_out , np.matrix.getH(model_out) )
-        est_FC = cur_estFC/len(freqrange) + estFC
+        estFC = cur_estFC/len(freqrange) + estFC
 
     # Now normalize estFC
     diagFC = np.diag(np.abs(estFC))
