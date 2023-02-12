@@ -3,3 +3,4 @@ data/
 sbi-logs/
 __pycache__
 .ipynb_checkpoints
+*.jpg
