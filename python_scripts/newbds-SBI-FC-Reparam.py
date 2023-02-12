@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# RUN SBI-SGM in alpha, new bounds
+# 
 # parameters order is  :taue,taui,tauG,speed,alpha,gii,gei (In second)
 
 # 
@@ -25,6 +27,7 @@ from tqdm import trange
 from scipy.io import loadmat
 from functools import partial
 from easydict import EasyDict as edict
+import argparse
 
 
 # In[2]:
@@ -52,11 +55,16 @@ from FC_utils import build_fc_freq_m
 from constants import RES_ROOT, DATA_ROOT
 from utils.misc import load_pkl, save_pkl
 from utils.reparam import theta_raw_2out, logistic_np, logistic_torch
+from utils.stable import paras_table_check
 
 
 # In[ ]:
 
 
+parser = argparse.ArgumentParser(description='RUN SBI-FC')
+parser.add_argument('--noise_sd', default=0.2, type=float, help='the noise sd added to data')
+parser.add_argument('--band', default="alpha", type=str, help='The freq band')
+args = parser.parse_args()
 
 
 
@@ -79,7 +87,7 @@ def vec_2mat(vec):
     return mat
 
 
-# In[7]:
+# In[6]:
 
 
 def get_mode(x):
@@ -87,6 +95,26 @@ def get_mode(x):
     xs = np.linspace(x.min(), x.max(), 500)
     ys = kde_est(xs)
     return xs[np.argmax(ys)]
+
+
+# In[21]:
+
+
+def _filter_unstable(theta_raw, prior_bds, x=None):
+    """This fn is to remove unstable SGM parameters
+        args: theta_raw: parameters: num of sps x dim
+                order: ['Taue', 'Taui', 'TauC', 'Speed', 'alpha', 'gii', 'gei']
+    """
+    theta = _theta_raw_2out(theta_raw.numpy(), prior_bds)
+    stable_idxs = paras_table_check(theta)
+    
+    # keep stable sps only
+    theta_raw_stable = theta_raw[stable_idxs==0]
+    if x is not None:
+        x_stable = x[stable_idxs==0]
+        return theta_raw_stable, x_stable
+    else:
+        return theta_raw_stable
 
 
 # In[ ]:
@@ -101,48 +129,39 @@ def get_mode(x):
 
 
 # SC
-ind_conn_xr = xr.open_dataarray('../data/individual_connectomes_reordered.nc')
+ind_conn_xr = xr.open_dataarray(DATA_ROOT/'individual_connectomes_reordered.nc')
 ind_conn = ind_conn_xr.values
 
 # PSD
-ind_psd_xr = xr.open_dataarray('../data/individual_psd_reordered_matlab.nc')
+ind_psd_xr = xr.open_dataarray(DATA_ROOT/'individual_psd_reordered_matlab.nc')
 ind_psd = ind_psd_xr.values
 fvec = ind_psd_xr["frequencies"].values
 
 
-# In[9]:
+# In[10]:
 
 
 _paras = edict()
 _paras.delta = [2, 3.5]
 _paras.theta = [4, 7]
 _paras.alpha = [8, 12]
-_paras.beta = [13, 35]
+_paras.beta_l = [13, 20]
 
 
-# In[10]:
-
-
-# Parameter bounds for optimization
-v_lower = 3.5-1.8
-v_upper = 3.5+1.8
-bnds = ((0.005,0.030), (0.005,0.2), (0.005,0.030), (v_lower,v_upper), (0.1,1.0), (0.5,10.0), (0.5,10.0))
-#taue,taui,tauG,speed,alpha,gii,gei
-
-
-# In[18]:
+# In[11]:
 
 
 paras = edict()
 
-paras.fc_type = "delta" #stick to coh
+paras.fc_type = args.band #"delta" #stick to coh
 paras.freqrange =  np.linspace(_paras[paras.fc_type][0], _paras[paras.fc_type][1], 5)
 print(paras.freqrange)
 paras.fs = 600
 paras.num_nodes = 86 # Number of cortical (68) + subcortical nodes
-paras.par_low =  np.array([ix[0] for ix in bnds])
-paras.par_high = np.array([ix[1] for ix in bnds])
+paras.par_low = np.asarray([0.005,0.005,0.005,5, 0.1,0.001,0.001])
+paras.par_high = np.asarray([0.03, 0.20, 0.03,20,  1,    2,  0.7])
 paras.prior_bds = np.array([paras.par_low, paras.par_high]).T
+paras.names = ["Taue", "Taui", "TauC", "Speed", "alpha", "gii", "gei"]
 paras.prior_sd = 10
 paras.add_v = 0.05
 
@@ -150,10 +169,10 @@ paras.SBI_paras = edict()
 paras.SBI_paras.num_prior_sps = int(1e3)
 paras.SBI_paras.density_model = "nsf"
 paras.SBI_paras.num_round = 3
-paras.SBI_paras.noise_sd = 0.2
+paras.SBI_paras.noise_sd = args.noise_sd
 
 
-# In[19]:
+# In[12]:
 
 
 # fn for reparemetering
@@ -169,18 +188,19 @@ _theta_raw_2out = partial(theta_raw_2out, map_fn=partial(logistic_np, k=0.1))
 
 # ### Load the data
 
-# In[20]:
+# In[13]:
 
 
 
 def _add_v2con(cur_ind_conn):
     cur_ind_conn = cur_ind_conn.copy()
     add_v = np.max(cur_ind_conn)*paras.add_v # tuning 0.1
-    np.fill_diagonal(cur_ind_conn[:34, 34:68], cur_ind_conn[:34, 34:68] + add_v)
-    np.fill_diagonal(cur_ind_conn[34:68, :34], cur_ind_conn[34:68, :34] + add_v)
-    np.fill_diagonal(cur_ind_conn[68:77, 77:], cur_ind_conn[68:77, 77:] + add_v)
-    np.fill_diagonal(cur_ind_conn[77:, 68:77], cur_ind_conn[77:, 68:77] + add_v)
+    np.fill_diagonal(cur_ind_conn[:34, 34:68], np.diag(cur_ind_conn[:34, 34:68]) + add_v)
+    np.fill_diagonal(cur_ind_conn[34:68, :34], np.diag(cur_ind_conn[34:68, :34]) + add_v)
+    np.fill_diagonal(cur_ind_conn[68:77, 77:], np.diag(cur_ind_conn[68:77, 77:]) + add_v)
+    np.fill_diagonal(cur_ind_conn[77:, 68:77], np.diag(cur_ind_conn[77:, 68:77]) + add_v)
     return cur_ind_conn
+
 
 if paras.add_v != 0:
     print(f"Add {paras.add_v} on diag")
@@ -188,7 +208,7 @@ if paras.add_v != 0:
     ind_conn = np.transpose(np.array(ind_conn_adds), (1, 2, 0))
 
 
-# In[21]:
+# In[14]:
 
 
 # Load true MEG FC time series:
@@ -208,13 +228,13 @@ true_FC.shape
 
 # ### Prior
 
-# In[22]:
+# In[15]:
 
 
 prior = MultivariateNormal(loc=torch.zeros(7), covariance_matrix=torch.eye(7)*(paras.prior_sd**2))
 
 
-# In[23]:
+# In[16]:
 
 
 def simulator(raw_params, brain, noise_sd, prior_bds, freqrange):
@@ -240,7 +260,7 @@ def simulator(raw_params, brain, noise_sd, prior_bds, freqrange):
     
 
 
-# In[ ]:
+# In[26]:
 
 
 for cur_ind_idx in range(0, 36):
@@ -267,10 +287,13 @@ for cur_ind_idx in range(0, 36):
     #num_spss = [10000, 10000, 5000]
     for ix in range(paras.SBI_paras.num_round):
         theta, x = simulate_for_sbi(simulator_wrapper, proposal,
-                                    num_simulations=paras.SBI_paras.num_prior_sps, 
+                                    num_simulations=int(paras.SBI_paras.num_prior_sps*2),
                                     num_workers=20)
+        theta_stable, x_stable = _filter_unstable(theta, paras.prior_bds, x)
+        theta_stable, x_stable = theta_stable[:paras.SBI_paras.num_prior_sps, :], x_stable[:paras.SBI_paras.num_prior_sps, :]
+        print(x_stable.shape)
         density_estimator = inference.append_simulations(
-                            theta, x, proposal=proposal
+                            theta_stable, x_stable, proposal=proposal
                             ).train()
         posterior = inference.build_posterior(density_estimator)
         
@@ -279,8 +302,19 @@ for cur_ind_idx in range(0, 36):
         proposal = posterior.set_default_x(curX)
     
     #MR: multi-round
-    save_fil = f"posteriorMRmul_{paras.fc_type}_" +                f"num{paras.SBI_paras.num_prior_sps}_" +                f"density{paras.SBI_paras.density_model}_" +                f"MR{paras.SBI_paras.num_round}_" +                f"noise_sd{paras.SBI_paras.noise_sd*100:.0f}_" +               f"addv{paras.add_v*100:.0f}" +               f"/ind{cur_ind_idx}.pkl"
+    save_fil = f"newbdscorrectNewFC_posteriorMRmul_{paras.fc_type}_" +                f"num{paras.SBI_paras.num_prior_sps}_" +                f"density{paras.SBI_paras.density_model}_" +                f"MR{paras.SBI_paras.num_round}_" +                f"noise_sd{paras.SBI_paras.noise_sd*100:.0f}_" +               f"addv{paras.add_v*100:.0f}" +               f"/ind{cur_ind_idx}.pkl"
         
     save_pkl(RES_ROOT/save_fil, proposal)
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
 
 
