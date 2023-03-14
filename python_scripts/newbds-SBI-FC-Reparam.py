@@ -212,10 +212,9 @@ if paras.add_v != 0:
 
 
 # Load true MEG FC time series:
-dataPath = DATA_ROOT/f'./MEG_FC_{paras.fc_type}_DK_networks_coh.mat'
+dataPath = DATA_ROOT/f'./epochs3_MEG_FC_{paras.fc_type}_DK_networks_coh.mat'
 data = loadmat(dataPath);
 true_FC = data[f"MEG_{paras.fc_type}_FC_networks_coh"]
-true_FC.shape
 
 
 # In[ ]:
@@ -302,7 +301,7 @@ for cur_ind_idx in range(0, 36):
         proposal = posterior.set_default_x(curX)
     
     #MR: multi-round
-    save_fil = f"newbdscorrectNewFC_posteriorMRmul_{paras.fc_type}_" +                f"num{paras.SBI_paras.num_prior_sps}_" +                f"density{paras.SBI_paras.density_model}_" +                f"MR{paras.SBI_paras.num_round}_" +                f"noise_sd{paras.SBI_paras.noise_sd*100:.0f}_" +               f"addv{paras.add_v*100:.0f}" +               f"/ind{cur_ind_idx}.pkl"
+    save_fil = f"epochs3_newbdscorrectNewFC_posteriorMRmul_{paras.fc_type}_" +                f"num{paras.SBI_paras.num_prior_sps}_" +                f"density{paras.SBI_paras.density_model}_" +                f"MR{paras.SBI_paras.num_round}_" +                f"noise_sd{paras.SBI_paras.noise_sd*100:.0f}_" +               f"addv{paras.add_v*100:.0f}" +               f"/ind{cur_ind_idx}.pkl"
         
     save_pkl(RES_ROOT/save_fil, proposal)
 

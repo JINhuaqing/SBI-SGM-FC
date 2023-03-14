@@ -216,7 +216,7 @@ if paras.add_v != 0:
 # Load true MEG FC time series:
 true_FCs = []
 for fc_type in paras.fc_types:
-    dataPath = DATA_ROOT/f'./MEG_FC_{fc_type}_DK_networks_coh.mat'
+    dataPath = DATA_ROOT/f'./epochs3_MEG_FC_{fc_type}_DK_networks_coh.mat'
     data = loadmat(dataPath);
     true_FC = data[f"MEG_{fc_type}_FC_networks_coh"]
     true_FCs.append(true_FC)
@@ -273,7 +273,9 @@ def simulator(raw_params, brain, noise_sd, prior_bds, freqranges):
 # In[ ]:
 
 
-for cur_ind_idx in range(5, 15):
+#for cur_ind_idx in range(24, 36):
+for cur_ind_idx in range(15, 24):
+#for cur_ind_idx in range(3, 12):
     print(cur_ind_idx)
     # create spectrome brain:
     brain = Brain.Brain()
@@ -318,7 +320,7 @@ for cur_ind_idx in range(5, 15):
         proposal = posterior.set_default_x(curX)
     
     #MR: multi-round
-    save_fil = f"newbdscorrectNewFC_posteriorMRmulDiffNum_{'-'.join(paras.fc_types)}_" +                f"num{paras.SBI_paras.num_prior_sps}_" +                f"density{paras.SBI_paras.density_model}_" +                f"MR{paras.SBI_paras.num_round}_" +                f"noise_sd{paras.SBI_paras.noise_sd*100:.0f}_" +               f"addv{paras.add_v*100:.0f}" +               f"/ind{cur_ind_idx}.pkl"
+    save_fil = f"epochs3_newbdscorrectNewFC_posteriorMRmulDiffNum_{'-'.join(paras.fc_types)}_" +                f"num{paras.SBI_paras.num_prior_sps}_" +                f"density{paras.SBI_paras.density_model}_" +                f"MR{paras.SBI_paras.num_round}_" +                f"noise_sd{paras.SBI_paras.noise_sd*100:.0f}_" +               f"addv{paras.add_v*100:.0f}" +               f"/ind{cur_ind_idx}.pkl"
         
     save_pkl(RES_ROOT/save_fil, proposal)
 
