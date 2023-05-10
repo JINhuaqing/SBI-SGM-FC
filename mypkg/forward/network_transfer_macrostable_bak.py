@@ -1,10 +1,9 @@
 """Module for computing basic quantities from a spectral graph model: the forward model
-Makes the calculation for a single frequency only. 
-Calculate SGM, but only fit on TauG, alpha, speed
-"""
+Makes the calculation for a single frequency only. """
 
 import numpy as np
-def network_transfer_local_fc_alpha(brain, parameters, w, diag_ws):
+
+def network_transfer_local_alpha(brain, parameters, w):
     """Network Transfer Function for spectral graph model.
 
     Args:
@@ -23,13 +22,21 @@ def network_transfer_local_fc_alpha(brain, parameters, w, diag_ws):
     """
     C = brain.reducedConnectome
     D = brain.distance_matrix
-    # only take 68
-    C = C[:68, :68]
-    D = D[:68, :68]
 
+    tau_e = parameters["tau_e"]
+    tau_i = parameters["tau_i"]
     speed = parameters["speed"]
+    gei = parameters[
+        "gei"
+    ]  # excitatory-inhibitory synaptic conductance as ratio of E-E syn
+    gii = parameters[
+        "gii"
+    ]  # inhibitory-inhibitory synaptic conductance as ratio of E-E syn
     tauC = parameters["tauC"]
     alpha = parameters["alpha"]
+#     gee = parameters["gee"]
+    
+    gee = 1
     
     # Defining some other parameters used:
     zero_thr = 0.05
@@ -61,16 +68,25 @@ def network_transfer_local_fc_alpha(brain, parameters, w, diag_ws):
     eigenvalues = np.transpose(eig_val)
     eigenvectors = eig_vec[:, 0:K]
 
-    # Cortical model
+#     # Cortical model
+    Fe = np.divide(1 / tau_e ** 2, (1j * w + 1 / tau_e) ** 2)
+    Fi = np.divide(1 / tau_i ** 2, (1j * w + 1 / tau_i) ** 2)
     FG = np.divide(1 / tauC ** 2, (1j * w + 1 / tauC) ** 2)
 
+    Hed = (1 + (Fe * Fi * gei)/(tau_e * (1j * w + Fi * gii/tau_i)))/(1j * w + Fe * gee/tau_e + (Fe * Fi * gei)**2/(tau_e * tau_i * (1j * w + Fi * gii / tau_i)))
+    
+    Hid = (1 - (Fe * Fi * gei)/(tau_i * (1j * w + Fe * gee/tau_e)))/(1j * w + Fi * gii/tau_i + (Fe * Fi * gei)**2/(tau_e * tau_i * (1j * w + Fe * gee / tau_e)))
 
+    Htotal = Hed + Hid
+
+
+#     q1 = (1j * w + 1 / tau_e * Fe * eigenvalues)
     q1 = (1j * w + 1 / tauC * FG * eigenvalues)
     qthr = zero_thr * np.abs(q1[:]).max()
     magq1 = np.maximum(np.abs(q1), qthr)
     angq1 = np.angle(q1)
     q1 = np.multiply(magq1, np.exp(1j * angq1))
-    frequency_response = np.divide(diag_ws, q1)
+    frequency_response = np.divide(Htotal, q1)
     
     model_out = 0
 
@@ -78,5 +94,8 @@ def network_transfer_local_fc_alpha(brain, parameters, w, diag_ws):
         model_out += (frequency_response[k]) * np.outer(eigenvectors[:, k], np.conjugate(eigenvectors[:, k]))
 
     # model_out2 = np.linalg.norm(model_out,axis=1)
+
+    
+    # return model_out2, frequency_response, eigenvalues, eigenvectors
 
     return model_out, frequency_response, eigenvalues, eigenvectors
