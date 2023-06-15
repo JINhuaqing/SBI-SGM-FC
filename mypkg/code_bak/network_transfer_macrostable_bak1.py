@@ -1,5 +1,3 @@
-# New way to estimate FC (on May 28, 2023)
-# 
 """Module for computing basic quantities from a spectral graph model: the forward model
 Makes the calculation for a single frequency only. 
 Calculate SGM, but only fit on TauG, alpha, speed
@@ -12,11 +10,16 @@ def network_transfer_local_fc_alpha(brain, parameters, w, diag_ws):
     Args:
         brain (Brain): specific brain to calculate NTF
         parameters (dict): parameters for ntf. We shall keep this separate from Brain
-               for now, as we want to change and update according to fitting.
-        w (float): frequency at which to calculate NTF, in angular freq not in Hz (on May 28, 2023)
+        for now, as we want to change and update according to fitting.
+        frequency (float): frequency at which to calculate NTF
 
     Returns:
-        fc(numpy asarray):  The FC for the given frequency (w)
+        model_out (numpy asarray):  Each region's frequency response for
+        the given frequency (w)
+        frequency_response (numpy asarray):
+        ev (numpy asarray): Eigen values
+        Vv (numpy asarray): Eigen vectors
+
     """
     # remove the following idxs
     rm_idxs = [68, 76, 77, 85]
@@ -28,6 +31,9 @@ def network_transfer_local_fc_alpha(brain, parameters, w, diag_ws):
     C = np.delete(C, rm_idxs, axis=1)
     D = np.delete(D, rm_idxs, axis=0)
     D = np.delete(D, rm_idxs, axis=1)
+    # only take 68
+    #C = C[:68, :68]
+    #D = D[:68, :68]
 
     speed = parameters["speed"]
     tauC = parameters["tauC"]
@@ -44,6 +50,7 @@ def network_transfer_local_fc_alpha(brain, parameters, w, diag_ws):
     coldegree[qind] = np.inf
 
     nroi = C.shape[0]
+
     K = nroi
 
     Tau = 0.001 * D / speed
@@ -59,8 +66,8 @@ def network_transfer_local_fc_alpha(brain, parameters, w, diag_ws):
     eig_vec = v[:, eig_ind]  # re-indexing eigen vectors according to sorted index
     eig_val = d[eig_ind]  # re-indexing eigen values with same sorted index
 
-    eigenvalues = np.transpose(eig_val[:K])
-    eigenvectors = eig_vec[:, :K]
+    eigenvalues = np.transpose(eig_val)
+    eigenvectors = eig_vec[:, 0:K]
 
     # Cortical model
     FG = np.divide(1 / tauC ** 2, (1j * w + 1 / tauC) ** 2)
@@ -71,9 +78,16 @@ def network_transfer_local_fc_alpha(brain, parameters, w, diag_ws):
     magq1 = np.maximum(np.abs(q1), qthr)
     angq1 = np.angle(q1)
     q1 = np.multiply(magq1, np.exp(1j * angq1))
-    frequency_response = np.divide(diag_ws, np.abs(q1)**2)
+    frequency_response = np.divide(diag_ws, q1)
+    # no square for diag_ws
+    # A new way to get FC (on May 24, 2023)
+    # new exp FC
+    # calculate the diag ws by my own.
     
-    fc = eigenvectors @ np.diag(frequency_response) @ np.conjugate(eigenvectors.T)
-    fc = np.abs(fc)
+    model_out = 0
+    for k in range(K):
+        model_out += (frequency_response[k]) * np.outer(eigenvectors[:, k], np.conjugate(eigenvectors[:, k]))
 
-    return fc
+    # model_out2 = np.linalg.norm(model_out,axis=1)
+
+    return model_out, frequency_response, eigenvalues, eigenvectors

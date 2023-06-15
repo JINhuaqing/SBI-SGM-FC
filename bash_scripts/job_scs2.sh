@@ -11,12 +11,14 @@
 #### Allocate 1 GPU resource for this job. 
 #####SBATCH --gres=gpu:teslav100:1   
 #SBATCH --output=logs/job-%x.out
-#SBATCH -J new_sgm_bandwise_delta_w0
+#SBATCH -J alpha_01
 
 
 #### You job
 echo "Running prime number generator program on $SLURM_CPUS_ON_NODE CPU cores"
 
-bash $1
+singularity exec ~/jin/singularity_containers/sgm_latest.sif python ../python_scripts/RUN_bandwise.py --noise_sd 0.1 --band alpha
+
+[[ -n "$JOB_ID" ]] && qstat -j "$JOB_ID"
 
 

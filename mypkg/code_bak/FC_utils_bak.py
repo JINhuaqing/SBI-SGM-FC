@@ -1,7 +1,5 @@
-# Note that I used a new way to do FC (on May 28, 2023)
-# U lambda^2 U^H
 import numpy as np
-from forward import network_transfer_macrostable as nt
+from code_bak import network_transfer_macrostable_bak1 as nt
 
 def build_fc_freq_m(brain, params , freqrange, diag_ws):
 
@@ -21,7 +19,9 @@ def build_fc_freq_m(brain, params , freqrange, diag_ws):
     estFC = 0
     for cur_freq in freqrange:
         w = 2 * np.pi * cur_freq
-        cur_estFC = nt.network_transfer_local_fc_alpha(brain, params, w, diag_ws)
+        model_out, _, _, _ = nt.network_transfer_local_fc_alpha(brain, params, w, diag_ws)
+        # No noise matrix P(\omega) explicitly used here
+        cur_estFC = np.matmul(model_out , np.matrix.getH(model_out) )
         estFC = cur_estFC/len(freqrange) + estFC
 
     # Now normalize estFC

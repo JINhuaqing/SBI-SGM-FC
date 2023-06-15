@@ -55,7 +55,7 @@ def obt_poly_coefs(theta):
     return coefs.T
 
 
-def paras_table_check(theta):
+def paras_stable_check(theta):
     """The fn to obtain the polynomial coefs based on SGM parameters
             args: theta: parameters: num of sps x dim
                 order: ['Taue', 'Taui', 'TauC', 'Speed', 'alpha', 'gii', 'gei']

@@ -34,10 +34,10 @@ def logistic_np(x, k=0.10):
 
 def theta_raw_2out(thetas_raw, prior_bds, map_fn=logistic_np):
     """transform reparameterized theta to orignal theta
-        args: thetas_raw: an array with num_sps x 7
-              prior_bds: an array with 7 x 2
+        args: thetas_raw: an array with num_sps x 7(3)
+              prior_bds: an array with 7(3) x 2
     """
-    assert prior_bds.shape[0] == 7
-    assert thetas_raw.shape[1] == 7
+    #assert prior_bds.shape[0] == 7
+    #assert thetas_raw.shape[1] == 7
     thetas_out = map_fn(thetas_raw)*(prior_bds[:, 1] -  prior_bds[:, 0]) + prior_bds[:, 0]
     return thetas_out
