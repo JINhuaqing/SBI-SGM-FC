@@ -176,7 +176,7 @@ paras.prior_sd = 10
 paras.add_v = 0.01
 
 paras.SBI_paras = edict()
-paras.SBI_paras.num_prior_sps = int(1e3)
+paras.SBI_paras.num_prior_sps = int(1e4)
 paras.SBI_paras.density_model = "nsf"
 paras.SBI_paras.num_round = 3 # 3
 paras.SBI_paras.noise_sd = args.noise_sd

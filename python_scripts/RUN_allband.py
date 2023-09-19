@@ -5,14 +5,41 @@
 # 
 # parameters order is  :tauG,speed,alpha (In second)
 # 
-# all band
-"""
-I consdier the diag_ws (on May 3, 2023), average over all subjects and bands
-"""
+# 
+# I run on all bands (on Aug 24, 2023). 
+# 
+# 1. We remove 4 bad channels 
+# 
+# 2. All diag ws are 1
+# 
+
+# In[13]:
+
+
+import sys  
+def is_jupyter():  
+    if 'ipykernel' in sys.modules:  
+        return True  
+    else:  
+        return False  
+
+
+# In[14]:
+
+
+RUN_PYTHON_SCRIPT = not is_jupyter()
+SAVE_PREFIX = "rawfc"
+
+
+# In[ ]:
+
+
+
+
 
 # ## Import some pkgs
 
-# In[1]:
+# In[3]:
 
 
 import sys
@@ -30,10 +57,9 @@ from tqdm import trange
 from scipy.io import loadmat
 from functools import partial
 from easydict import EasyDict as edict
-import argparse
 
 
-# In[2]:
+# In[4]:
 
 
 # SBI and torch
@@ -49,7 +75,7 @@ import torch
 from torch.distributions.multivariate_normal import MultivariateNormal
 
 
-# In[3]:
+# In[5]:
 
 
 # my own fns
@@ -60,24 +86,32 @@ from utils.misc import load_pkl, save_pkl
 from utils.reparam import theta_raw_2out, logistic_np, logistic_torch
 
 
+# In[6]:
+
+
+import argparse
+
+if RUN_PYTHON_SCRIPT:
+    parser = argparse.ArgumentParser(description='RUN SBI-FC allband')
+    parser.add_argument('--noise_sd', default=0.2, type=float, help='the noise sd added to data')
+    args = parser.parse_args()
+
+
 # In[ ]:
 
 
-parser = argparse.ArgumentParser(description='RUN SBI-FC allband')
-parser.add_argument('--noise_sd', default=0.2, type=float, help='the noise sd added to data')
-args = parser.parse_args()
 
 
 
 # ## Some fns
 
-# In[4]:
+# In[7]:
 
 
 _minmax_vec = lambda x: (x-np.min(x))/(np.max(x)-np.min(x))
 
 
-# In[5]:
+# In[8]:
 
 
 # transfer vec to a sym mat
@@ -88,7 +122,7 @@ def vec_2mat(vec):
     return mat
 
 
-# In[6]:
+# In[9]:
 
 
 def get_mode(x):
@@ -106,7 +140,7 @@ def get_mode(x):
 
 # ### Some parameters
 
-# In[7]:
+# In[10]:
 
 
 # SC
@@ -119,24 +153,22 @@ ind_psd = ind_psd_xr.values
 fvec = ind_psd_xr["frequencies"].values;
 
 
-# In[8]:
+# In[11]:
 
 
 from scipy.io import loadmat
 # The array is ordered as in ‘alpha’, ‘beta_l’, ‘delta’, ‘theta’
-diag_ws = loadmat(DATA_ROOT/"diagonal_UFU.mat")["prjctFC_diag"];
-diag_ws = np.abs(diag_ws).mean(axis=(1, 2))
-diag_ws[0] = 0 # remove it
-diag_ws.shape
+#diag_ws = np.abs(diag_ws).mean(axis=(1, 2))
+diag_ws = np.ones(82)
+#diag_ws[0] = 1 # remove it
+# normalized diag_ws (to mean 1 or max 1) (on May 10, 2023)
+# or log(ws/min(ws)) still remove the first term (on May 10, 2023)
+if not RUN_PYTHON_SCRIPT:
+    plt.plot(diag_ws)
+    plt.yscale("log")
 
 
-# In[ ]:
-
-
-
-
-
-# In[9]:
+# In[12]:
 
 
 _paras = edict()
@@ -146,16 +178,16 @@ _paras.alpha = [8, 12]
 _paras.beta_l = [13, 20]
 
 
-# In[29]:
+# In[16]:
 
 
 paras = edict()
 
-paras.fc_types = ["delta", "theta", "alpha", "beta_l"]
-paras.freqranges =  [np.linspace(_paras[fc_type][0], _paras[fc_type][1], 5) 
-                     for fc_type in paras.fc_types]
+paras.bands = ["delta", "theta", "alpha", "beta_l"]
+paras.freqranges =  [np.linspace(_paras[band ][0], _paras[band][1], 5) 
+                     for band in paras.bands]
 paras.diag_ws = diag_ws
-print(paras.freqrange)
+print(paras.freqranges)
 paras.fs = 600
 paras.num_nodes = 86 # Number of cortical (68) + subcortical nodes
 #paras.par_low = np.asarray([0.005,0.005,0.005,5, 0.1,0.001,0.001])
@@ -166,16 +198,20 @@ paras.par_high = np.asarray([0.03, 20, 1])
 paras.names = ["TauC", "Speed", "alpha"]
 paras.prior_bds = np.array([paras.par_low, paras.par_high]).T
 paras.prior_sd = 10
-paras.add_v = 0.05
+paras.add_v = 0.01
 
 paras.SBI_paras = edict()
 paras.SBI_paras.num_prior_sps = int(1e4)
 paras.SBI_paras.density_model = "nsf"
 paras.SBI_paras.num_round = 2 # 3
-paras.SBI_paras.noise_sd = args.noise_sd
+if RUN_PYTHON_SCRIPT:
+    paras.SBI_paras.noise_sd = args.noise_sd
+else:
+    paras.SBI_paras.noise_sd = 0.2
+print(paras.diag_ws)
 
 
-# In[30]:
+# In[12]:
 
 
 # fn for reparemetering
@@ -191,13 +227,13 @@ _theta_raw_2out = partial(theta_raw_2out, map_fn=partial(logistic_np, k=0.1))
 
 # ### Load the data
 
-# In[31]:
+# In[13]:
 
 
 
 def _add_v2con(cur_ind_conn):
     cur_ind_conn = cur_ind_conn.copy()
-    add_v = np.max(cur_ind_conn)*paras.add_v # tuning 0.1
+    add_v = np.quantile(cur_ind_conn, 0.99)*paras.add_v # tuning 0.1
     np.fill_diagonal(cur_ind_conn[:34, 34:68], np.diag(cur_ind_conn[:34, 34:68]) + add_v)
     np.fill_diagonal(cur_ind_conn[34:68, :34], np.diag(cur_ind_conn[34:68, :34]) + add_v)
     np.fill_diagonal(cur_ind_conn[68:77, 77:], np.diag(cur_ind_conn[68:77, 77:]) + add_v)
@@ -210,17 +246,19 @@ if paras.add_v != 0:
     ind_conn = np.transpose(np.array(ind_conn_adds), (1, 2, 0))
 
 
-# In[32]:
+# In[14]:
 
 
-# Load true MEG FC time series:
-true_FCs = []
-for fc_type in paras.fc_types:
-    dataPath = DATA_ROOT/f'./MEG_FC_{fc_type}_DK_networks_coh.mat'
-    data = loadmat(dataPath);
-    true_FC = data[f"MEG_{fc_type}_FC_networks_coh"]
-    true_FCs.append(true_FC)
-
+# em FC
+fc_root = RES_ROOT/"emp_fcs"
+fcss = []
+for band in paras.bands:
+    def _get_fc(sub_ix, bd):
+        fil = list(fc_root.rglob(f"*{bd}*/sub{sub_ix}.pkl"))[0]
+        return load_pkl(fil, verbose=False)
+    
+    fcs = np.array([_get_fc(sub_ix, band) for sub_ix in range(36)]);
+    fcss.append(fcs)
 
 
 # In[ ]:
@@ -233,21 +271,13 @@ for fc_type in paras.fc_types:
 
 # ### Prior
 
-# In[33]:
+# In[15]:
 
 
 prior = MultivariateNormal(loc=torch.zeros(3), covariance_matrix=torch.eye(3)*(paras.prior_sd**2))
 
 
-# In[34]:
-
-params_dict = dict()
-params_dict["tauC"] =   paras.par_low[0]
-params_dict["speed"] =  paras.par_low[1]
-params_dict["alpha"] =  paras.par_low[2]
-
-
-# In[35]:
+# In[16]:
 
 
 def simulator(raw_params, brain, noise_sd, prior_bds, freqranges, diag_ws):
@@ -271,11 +301,18 @@ def simulator(raw_params, brain, noise_sd, prior_bds, freqranges, diag_ws):
     noise =  np.random.randn(*ress.shape)*noise_sd
     return (ress+ noise).flatten()
 
-# In[ ]:
+
+# In[19]:
 
 
 for cur_ind_idx in range(0, 36):
     print(cur_ind_idx)
+    save_fil = f"{SAVE_PREFIX}_posteriorMRmulDiffNum_{'-'.join(paras.bands)}_" +                f"num{paras.SBI_paras.num_prior_sps}_" +                f"density{paras.SBI_paras.density_model}_" +                f"MR{paras.SBI_paras.num_round}_" +                f"noise_sd{paras.SBI_paras.noise_sd*100:.0f}_" +               f"addv{paras.add_v*100:.0f}" +               f"/ind{cur_ind_idx}.pkl"
+    if (RES_ROOT/save_fil).exists():
+        # thanks to the buggy SCS
+        continue
+    
+    
     # create spectrome brain:
     brain = Brain.Brain()
     brain.add_connectome(DATA_ROOT) # grabs distance matrix
@@ -289,7 +326,7 @@ for cur_ind_idx in range(0, 36):
                            brain=brain, 
                            noise_sd=paras.SBI_paras.noise_sd, 
                            prior_bds=paras.prior_bds, 
-                           freqrange=paras.freqrange, 
+                           freqranges=paras.freqranges, 
                            diag_ws=paras.diag_ws)
     simulator_wrapper, prior = prepare_for_sbi(simulator_sp, prior)
     inference = SNPE(prior=prior, density_estimator=paras.SBI_paras.density_model)
@@ -297,13 +334,14 @@ for cur_ind_idx in range(0, 36):
     
     #the observed data
     res_vecs = []
-    for true_FC in true_FCs:
-        cur_obs_FC = np.abs(true_FC[:, :, cur_ind_idx])
+    for fcs in fcss:
+        cur_obs_FC = np.abs(fcs[cur_ind_idx])
         res_vec = _minmax_vec(cur_obs_FC[np.triu_indices(68, k = 1)])
         res_vecs.append(res_vec)
     res_vecs = np.concatenate(res_vecs)
     curX = torch.Tensor(res_vecs)
-    num_spss = [10000, 1000, 1000]
+    num_spss = [1000, 1000, 1000]
+    #num_spss = [10000, 1000, 1000]
     for ix in range(paras.SBI_paras.num_round):
         cur_num_sps = num_spss[ix]
         theta, x = simulate_for_sbi(simulator_wrapper, proposal,
@@ -314,19 +352,19 @@ for cur_ind_idx in range(0, 36):
                             ).train()
         posterior = inference.build_posterior(density_estimator)
         
-        
-        #update proposal 
         proposal = posterior.set_default_x(curX)
     
-    #MR: multi-round
-    save_fil = (f"newsgm_posteriorMRmulDiffNum_{'-'.join(paras.fc_types)}_" +
-                f"num{paras.SBI_paras.num_prior_sps}_" + 
-                f"density{paras.SBI_paras.density_model}_" +
-                f"MR{paras.SBI_paras.num_round}_" + 
-                f"noise_sd{paras.SBI_paras.noise_sd*100:.0f}_" +
-                f"addv{paras.add_v*100:.0f}" + 
-                f"/ind{cur_ind_idx}.pkl")
-        
     save_pkl(RES_ROOT/save_fil, proposal)
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
 
 
