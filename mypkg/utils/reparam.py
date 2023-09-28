@@ -3,6 +3,7 @@ import numpy as np
 import torch
 from scipy.stats import norm as sci_normal
 from torch.distributions.normal import Normal as tor_normal
+from numbers import Number
 
 def normcdf_np(x, sd=10):
     return sci_normal(loc=0, scale=sd).cdf(x)
@@ -25,6 +26,9 @@ def logistic_torch(x, k=0.10):
 def logistic_np(x, k=0.10):
     """k=0.1 fits prior N(0, 100)
     """
+    
+    if not isinstance(x, Number):
+        x = np.array(x)
     num = np.exp(k*x)
     den = np.exp(k*x) + 1
     # fix inf issue

@@ -3,7 +3,7 @@
 import numpy as np
 from forward import network_transfer_macrostable as nt
 
-def build_fc_freq_m(brain, params , freqrange, diag_ws):
+def build_fc_freq_m(brain, params , freqrange):
 
     """
     Input:
@@ -21,7 +21,7 @@ def build_fc_freq_m(brain, params , freqrange, diag_ws):
     estFC = 0
     for cur_freq in freqrange:
         w = 2 * np.pi * cur_freq
-        cur_estFC = nt.network_transfer_local_fc_alpha(brain, params, w, diag_ws)
+        cur_estFC = nt.network_transfer_local_fc_alpha(brain, params, w)
         estFC = cur_estFC/len(freqrange) + estFC
 
     # Now normalize estFC

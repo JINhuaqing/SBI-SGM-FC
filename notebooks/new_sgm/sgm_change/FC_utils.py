@@ -1,9 +1,9 @@
 # Note that I used a new way to do FC (on May 28, 2023)
 # U lambda^2 U^H
 import numpy as np
-from forward import network_transfer_macrostable0 as nt
+from forward import network_transfer_macrostable as nt
 
-def build_fc_freq_m(brain, params , freqrange):
+def build_fc_freq_m(brain, params , freqrange, diag_ws):
 
     """
     Input:
@@ -21,7 +21,7 @@ def build_fc_freq_m(brain, params , freqrange):
     estFC = 0
     for cur_freq in freqrange:
         w = 2 * np.pi * cur_freq
-        cur_estFC = nt.network_transfer_local_fc_alpha(brain, params, w)
+        cur_estFC = nt.network_transfer_local_fc_alpha(brain, params, w, diag_ws)
         estFC = cur_estFC/len(freqrange) + estFC
 
     # Now normalize estFC

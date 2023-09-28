@@ -6,7 +6,7 @@ Calculate SGM, but only fit on TauG, alpha, speed
 """
 
 import numpy as np
-def network_transfer_local_fc_alpha(brain, parameters, w):
+def network_transfer_local_fc_alpha(brain, parameters, w, diag_ws):
     """Network Transfer Function for spectral graph model.
 
     Args:
@@ -18,9 +18,16 @@ def network_transfer_local_fc_alpha(brain, parameters, w):
     Returns:
         fc(numpy asarray):  The FC for the given frequency (w)
     """
+    # remove the following idxs
+    rm_idxs = [68, 76, 77, 85]
     
     C = brain.reducedConnectome
     D = brain.distance_matrix
+    
+    C = np.delete(C, rm_idxs, axis=0)
+    C = np.delete(C, rm_idxs, axis=1)
+    D = np.delete(D, rm_idxs, axis=0)
+    D = np.delete(D, rm_idxs, axis=1)
 
     speed = parameters["speed"]
     tauC = parameters["tauC"]
@@ -64,7 +71,7 @@ def network_transfer_local_fc_alpha(brain, parameters, w):
     magq1 = np.maximum(np.abs(q1), qthr)
     angq1 = np.angle(q1)
     q1 = np.multiply(magq1, np.exp(1j * angq1))
-    frequency_response = np.divide(1, np.abs(q1)**2)
+    frequency_response = np.divide(diag_ws, np.abs(q1)**2)
     
     fc = eigenvectors @ np.diag(frequency_response) @ np.conjugate(eigenvectors.T)
     fc = np.abs(fc)
