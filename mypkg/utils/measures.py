@@ -70,7 +70,7 @@ def geodesic_dist(Q1, Q2):
     Q1_neg_half = mat_power(Q1, -1/2)
     Q = Q1_neg_half @ Q2 @ Q1_neg_half
     eigvs, _ = np.linalg.eig(Q)
-    #assert np.sum(eigvs[np.abs(eigvs)>eps] <0) == 0, "mat should be PSD mat"
+    assert np.sum(eigvs[np.abs(eigvs)>eps] <0) == 0, "mat should be PSD mat"
     
     eigvs = np.abs(eigvs) # Q is PSD
     eigvs_part = eigvs[eigvs>eps]
