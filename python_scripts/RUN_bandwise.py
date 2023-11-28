@@ -9,8 +9,10 @@
 # In[29]:
 
 
+print("Runing my script")
 RUN_PYTHON_SCRIPT = True
-SAVE_PREFIX = "rawfc"
+EPN = 100
+SAVE_PREFIX = f"rawfc2ep{EPN}"
 
 
 # In[ ]:
@@ -75,6 +77,8 @@ import argparse
 parser = argparse.ArgumentParser(description='RUN SBI-FC')
 parser.add_argument('--noise_sd', default=0.2, type=float, help='the noise sd added to data')
 parser.add_argument('--band', default="alpha", type=str, help='The freq band')
+parser.add_argument('--num_sps', default=1000, type=int, help='Num sps per round')
+parser.add_argument('--num_round', default=3, type=int, help='Num Round')
 args = parser.parse_args()
 
 
@@ -176,9 +180,9 @@ paras.prior_sd = 10
 paras.add_v = 0.01
 
 paras.SBI_paras = edict()
-paras.SBI_paras.num_prior_sps = int(1e4)
+paras.SBI_paras.num_prior_sps = args.num_sps
 paras.SBI_paras.density_model = "nsf"
-paras.SBI_paras.num_round = 3 # 3
+paras.SBI_paras.num_round = args.num_round # 3
 paras.SBI_paras.noise_sd = args.noise_sd
 print(paras.diag_ws)
 
@@ -222,9 +226,9 @@ if paras.add_v != 0:
 
 
 # em FC
-fc_root = RES_ROOT/"emp_fcs"
+fc_root = RES_ROOT/"emp_fcs2"
 def _get_fc(sub_ix, bd):
-    fil = list(fc_root.rglob(f"*{paras.band}*/sub{sub_ix}.pkl"))[0]
+    fil = list(fc_root.rglob(f"*{paras.band}*nepoch-{EPN}/sub{sub_ix}.pkl"))[0]
     return load_pkl(fil, verbose=False)
 
 fcs = np.array([_get_fc(sub_ix, paras.band) for sub_ix in range(36)]);

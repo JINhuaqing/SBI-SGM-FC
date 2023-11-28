@@ -131,7 +131,7 @@ paras = edict()
 
 paras.band = args.band
 paras.nepoch = args.nepoch
-paras.save_prefix = "rawfc2"
+paras.save_prefix = "rawfc2newv"
 paras.freqrange =  np.linspace(_paras[paras.band][0], _paras[paras.band][1], 5)
 print(paras.freqrange)
 paras.fs = 600
@@ -139,11 +139,11 @@ paras.num_nodes = 86 # Number of cortical (68) + subcortical nodes
 #paras.par_low = np.asarray([0.005,0.005,0.005,5, 0.1,0.001,0.001])
 #paras.par_high = np.asarray([0.03, 0.20, 0.03,20,  1,    2,  0.7])
 #paras.names = ["Taue", "Taui", "TauC", "Speed", "alpha", "gii", "gei"]
-paras.par_low = np.asarray([0.005, 5, 0.1])
-paras.par_high = np.asarray([0.03, 20, 1])
+paras.par_low = np.asarray([0.005, 6, 0.1])
+paras.par_high = np.asarray([0.03, 18, 1])
 paras.names = ["TauC", "Speed", "alpha"]
 paras.prior_bds = np.array([paras.par_low, paras.par_high]).T
-paras.prior_sd = 1
+paras.prior_sd = 3
 paras.add_v = 0.01
 paras.k = 1
 
@@ -216,7 +216,7 @@ fcs = np.array([_get_fc(sub_ix, paras.band) for sub_ix in range(36)]);
 
 # get the informative prior
 def _get_prior(ind_idx):
-    fil = list(RES_ROOT.glob(f"rawfc2_ANN_{paras.band}_ep{paras.nepoch}"
+    fil = list(RES_ROOT.glob(f"{paras.save_prefix}_ANN_{paras.band}_ep{paras.nepoch}"
                              f"_addv{paras.add_v*100:.0f}/ind{ind_idx}.pkl"))[0];
     ann_res = load_pkl(fil, verbose=False);
     ann_res.ann_res.x
@@ -279,6 +279,7 @@ for cur_ind_idx in range(0, 36):
     #the observed data
     cur_obs_FC = np.abs(fcs[cur_ind_idx])
     curX = torch.Tensor(_minmax_vec(cur_obs_FC[np.triu_indices(68, k = 1)]))
+    #num_spss = [10000, 10000, 5000]
     for ix in range(paras.SBI_paras.num_round):
         theta, x = simulate_for_sbi(simulator_wrapper, proposal,
                                     num_simulations=int(paras.SBI_paras.num_prior_sps),

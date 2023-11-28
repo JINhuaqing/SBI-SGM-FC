@@ -107,7 +107,7 @@ paras = edict()
 
 paras.band = args.band
 paras.nepoch = args.nepoch
-paras.save_prefix = "rawfc2"
+paras.save_prefix = "rawfc2mse"
 paras.freqrange =  np.linspace(_paras[paras.band][0], _paras[paras.band][1], 5)
 print(paras.freqrange)
 #paras.par_low = np.asarray([0.005,0.005,0.005,5, 0.1,0.001,0.001])
@@ -205,7 +205,7 @@ def _obj_fn(raw_params, empfc, simulator_sp):
     empfc = np.abs(empfc)
     emp_res = _minmax_vec(empfc[np.triu_indices(68, k = 1)])
     simu_res = simulator_sp(raw_params)[0] # it is after minmax
-    rv = -lin_R_fn(simu_res, emp_res)[0]
+    rv = np.mean((simu_res-emp_res)**2)
     return rv
 
 
@@ -242,7 +242,7 @@ def _run_fn(sub_idx):
                          x0=np.array([0, 0, 0]),
                          bounds=paras.bounds, 
                          args=(empfc, simulator_sp), 
-                         maxiter=200,
+                         maxiter=50,
                          initial_temp=5230.0,
                          seed=24,
                          visit=2.62,

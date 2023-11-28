@@ -107,7 +107,7 @@ paras = edict()
 
 paras.band = args.band
 paras.nepoch = args.nepoch
-paras.save_prefix = "rawfc2"
+paras.save_prefix = "rawfc"
 paras.freqrange =  np.linspace(_paras[paras.band][0], _paras[paras.band][1], 5)
 print(paras.freqrange)
 #paras.par_low = np.asarray([0.005,0.005,0.005,5, 0.1,0.001,0.001])
@@ -166,7 +166,7 @@ if paras.add_v != 0:
 
 
 # em FC
-fc_root = RES_ROOT/"emp_fcs2"
+fc_root = RES_ROOT/"emp_fcs"
 def _get_fc(sub_ix, bd):
     fil = list(fc_root.rglob(f"*{bd}*{paras.nepoch}/sub{sub_ix}.pkl"))[0]
     return load_pkl(fil, verbose=False)
@@ -242,7 +242,7 @@ def _run_fn(sub_idx):
                          x0=np.array([0, 0, 0]),
                          bounds=paras.bounds, 
                          args=(empfc, simulator_sp), 
-                         maxiter=200,
+                         maxiter=100,
                          initial_temp=5230.0,
                          seed=24,
                          visit=2.62,

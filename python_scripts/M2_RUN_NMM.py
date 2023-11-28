@@ -278,11 +278,11 @@ for cur_ind_idx in range(36):
     brain.add_connectome(DATA_ROOT) # grabs distance matrix
     # re-ordering for DK atlas and normalizing the connectomes:
     brain.reorder_connectome(brain.connectome, brain.distance_matrix)
-    brain.connectome =  ind_conn[:, :, cur_ind_idx] # re-assign connectome to individual connectome
+    # re-assign connectome to individual connectome
+    brain.connectome = _add_v2con(ind_conn[:, :, cur_ind_idx], add_v=paras.add_v)
     brain.bi_symmetric_c()
     brain.reduce_extreme_dir()
     sc = brain.reducedConnectome
-    sc = _add_v2con(sc, add_v=paras.add_v)
     scs.append(sc[:, :])
 scs = np.array(scs)
 dmat = brain.distance_matrix[:, :];
@@ -373,6 +373,8 @@ for cur_ind_idx in range(36):
         evolution.saveEvolution(save_dir/save_name);
     else:
         evolution = evolution.loadEvolution(save_dir/save_name);
+    del cur_model, evolution
+
 
 
 # In[ ]:

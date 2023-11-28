@@ -10,7 +10,7 @@
 
 # ## Import some pkgs
 
-# In[2]:
+# In[1]:
 
 print("Runing my script")
 
@@ -32,7 +32,7 @@ from easydict import EasyDict as edict
 from scipy.optimize import dual_annealing
 
 
-# In[3]:
+# In[2]:
 
 
 # my own fns
@@ -45,20 +45,17 @@ from utils.measures import reg_R_fn, lin_R_fn
 from joblib import Parallel, delayed
 
 
+
+
 import argparse
 # In[ ]:
 parser = argparse.ArgumentParser(description='RUN ANN')
-parser.add_argument('--band', default="alpha", type=str, help='The freq band')
+parser.add_argument('--include_beta', action="store_true", help='Whether including betal band or not')
 parser.add_argument('--nepoch', default=100, type=int, help='Emp FC epoch')
 args = parser.parse_args()
-
-
-
-
-
 # ## Some fns
 
-# In[5]:
+# In[4]:
 
 
 _minmax_vec = lambda x: (x-np.min(x))/(np.max(x)-np.min(x));
@@ -78,7 +75,7 @@ def vec_2mat(vec):
 
 # ### Some parameters
 
-# In[6]:
+# In[5]:
 
 
 # SC
@@ -90,7 +87,7 @@ ind_psd_xr = xr.open_dataarray(DATA_ROOT/'individual_psd_reordered_matlab.nc')
 ind_psd = ind_psd_xr.values;
 
 
-# In[7]:
+# In[6]:
 
 
 _paras = edict()
@@ -100,16 +97,20 @@ _paras.alpha = [8, 12]
 _paras.beta_l = [13, 20]
 
 
-# In[9]:
+# In[48]:
 
 
 paras = edict()
 
-paras.band = args.band
+paras.save_prefix = "rawfc2allbd"
+if args.include_beta:
+    paras.bands = ["delta", "theta", "alpha", "beta_l"]
+else:
+    paras.bands = ["delta", "theta", "alpha"]
 paras.nepoch = args.nepoch
-paras.save_prefix = "rawfc2"
-paras.freqrange =  np.linspace(_paras[paras.band][0], _paras[paras.band][1], 5)
-print(paras.freqrange)
+paras.freqranges =  [np.linspace(_paras[band ][0], _paras[band][1], 5) 
+                     for band in paras.bands]
+print(paras.bands)
 #paras.par_low = np.asarray([0.005,0.005,0.005,5, 0.1,0.001,0.001])
 #paras.par_high = np.asarray([0.03, 0.20, 0.03,20,  1,    2,  0.7])
 #paras.names = ["Taue", "Taui", "TauC", "Speed", "alpha", "gii", "gei"]
@@ -119,6 +120,10 @@ paras.names = ["TauC", "Speed", "alpha"]
 paras.prior_bds = np.array([paras.par_low, paras.par_high]).T
 paras.add_v = 0.01
 paras.k = 1
+if len(paras.bands) == 4:
+    paras.ws = [1, 1, 1, 1]
+elif len(paras.bands) == 3:
+    paras.ws = [1, 1, 1]
 
 paras.bounds = [
     (-10, 10), 
@@ -127,7 +132,7 @@ paras.bounds = [
 ]
 
 
-# In[10]:
+# In[49]:
 
 
 # fn for reparemetering
@@ -143,7 +148,7 @@ _theta_raw_2out = partial(theta_raw_2out, map_fn=partial(logistic_np, k=paras.k)
 
 # ### Load the data
 
-# In[11]:
+# In[30]:
 
 
 
@@ -162,16 +167,19 @@ if paras.add_v != 0:
     ind_conn = np.transpose(np.array(ind_conn_adds), (1, 2, 0))
 
 
-# In[12]:
+# In[31]:
 
 
 # em FC
 fc_root = RES_ROOT/"emp_fcs2"
-def _get_fc(sub_ix, bd):
-    fil = list(fc_root.rglob(f"*{bd}*{paras.nepoch}/sub{sub_ix}.pkl"))[0]
-    return load_pkl(fil, verbose=False)
-
-fcs = np.array([_get_fc(sub_ix, paras.band) for sub_ix in range(36)]);
+fcss = []
+for band in paras.bands:
+    def _get_fc(sub_ix, bd):
+        fil = list(fc_root.rglob(f"*{bd}*{paras.nepoch}/sub{sub_ix}.pkl"))[0]
+        return load_pkl(fil, verbose=False)
+    
+    fcs = np.array([_get_fc(sub_ix, band) for sub_ix in range(36)]);
+    fcss.append(fcs)
 
 
 # In[ ]:
@@ -182,34 +190,45 @@ fcs = np.array([_get_fc(sub_ix, paras.band) for sub_ix in range(36)]);
 
 # ## Annealing
 
-# In[13]:
+# In[32]:
 
 
-def simulator(raw_params, brain, prior_bds, freqrange):
+def simulator(raw_params, brain, prior_bds, freqranges):
     params = _map_fn_np(raw_params)*(prior_bds[:, 1]-prior_bds[:, 0]) + prior_bds[:, 0]
     
     params_dict = dict()
     params_dict["tauC"] =  params[0]
     params_dict["speed"] =  params[1]
     params_dict["alpha"] =  params[2]
-    modelFC = build_fc_freq_m(brain , params_dict, freqrange)
-    modelFC_abs = np.abs(modelFC[:68, :68])
-    res = _minmax_vec(modelFC_abs[np.triu_indices(68, k = 1)])
-    return res, modelFC
+    
+    ress = []
+    modelFCs = []
+    for freqrange in freqranges:
+        modelFC = build_fc_freq_m(brain, params_dict, freqrange)
+        modelFC_abs = np.abs(modelFC[:68, :68])
+        res = _minmax_vec(modelFC_abs[np.triu_indices(68, k = 1)])
+        ress.append(res)
+        modelFCs.append(modelFC)
+    return ress, modelFCs
 
 
-# In[14]:
+# In[50]:
 
 
-def _obj_fn(raw_params, empfc, simulator_sp):
-    empfc = np.abs(empfc)
-    emp_res = _minmax_vec(empfc[np.triu_indices(68, k = 1)])
-    simu_res = simulator_sp(raw_params)[0] # it is after minmax
-    rv = -lin_R_fn(simu_res, emp_res)[0]
-    return rv
+def _obj_fn(raw_params, empfcs, simulator_sp, ws):
+    emp_ress = []
+    for empfc in empfcs:
+        empfc = np.abs(empfc)
+        emp_res = _minmax_vec(empfc[np.triu_indices(68, k = 1)])
+        emp_ress.append(emp_res)
+    simu_ress = simulator_sp(raw_params)[0] # it is after minmax
+    rvs = [-lin_R_fn(simu_res, emp_res)[0] 
+          for simu_res, emp_res in zip(simu_ress, emp_ress)]
+    #print(np.round(rvs, 3), np.round(np.average(rvs, weights=ws), 3), np.round(raw_params, 3))
+    return np.average(rvs, weights=ws)
 
 
-# In[15]:
+# In[51]:
 
 
 brains = []
@@ -225,23 +244,23 @@ for sub_idx in range(36):
     
 
 
-# In[16]:
+# In[52]:
 
 
 def _run_fn(sub_idx):
     # brain
     brain = brains[sub_idx]
     # empfc
-    empfc = fcs[sub_idx]
+    empfcs = [fcs[sub_idx] for fcs in fcss]
     
     simulator_sp = partial(simulator, 
                            brain=brain, 
                            prior_bds=paras.prior_bds, 
-                           freqrange=paras.freqrange)
+                           freqranges=paras.freqranges)
     res = dual_annealing(_obj_fn, 
                          x0=np.array([0, 0, 0]),
                          bounds=paras.bounds, 
-                         args=(empfc, simulator_sp), 
+                         args=(empfcs, simulator_sp, paras.ws), 
                          maxiter=200,
                          initial_temp=5230.0,
                          seed=24,
@@ -251,7 +270,7 @@ def _run_fn(sub_idx):
     save_res.bestfc = simulator_sp(res.x)[1]
     save_res.ann_res = res
     
-    save_fil = f"{paras.save_prefix}_ANN_{paras.band}_ep{paras.nepoch}_" +                    f"addv{paras.add_v*100:.0f}" +                   f"/ind{sub_idx}.pkl"
+    save_fil = f"{paras.save_prefix}_ANN_{'-'.join(paras.bands)}_ep{paras.nepoch}_" +                    f"addv{paras.add_v*100:.0f}" +                   f"/ind{sub_idx}.pkl"
     save_pkl(RES_ROOT/save_fil, save_res)
     return save_res
 

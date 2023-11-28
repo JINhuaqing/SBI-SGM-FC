@@ -107,14 +107,14 @@ paras = edict()
 
 paras.band = args.band
 paras.nepoch = args.nepoch
-paras.save_prefix = "rawfc2"
+paras.save_prefix = "rawfc2newv"
 paras.freqrange =  np.linspace(_paras[paras.band][0], _paras[paras.band][1], 5)
 print(paras.freqrange)
 #paras.par_low = np.asarray([0.005,0.005,0.005,5, 0.1,0.001,0.001])
 #paras.par_high = np.asarray([0.03, 0.20, 0.03,20,  1,    2,  0.7])
 #paras.names = ["Taue", "Taui", "TauC", "Speed", "alpha", "gii", "gei"]
-paras.par_low = np.asarray([0.005, 5, 0.1])
-paras.par_high = np.asarray([0.03, 20, 1])
+paras.par_low = np.asarray([0.005, 6, 0.1]) # !!! change here
+paras.par_high = np.asarray([0.03, 18, 1]) # !!! change here
 paras.names = ["TauC", "Speed", "alpha"]
 paras.prior_bds = np.array([paras.par_low, paras.par_high]).T
 paras.add_v = 0.01
@@ -239,12 +239,12 @@ def _run_fn(sub_idx):
                            prior_bds=paras.prior_bds, 
                            freqrange=paras.freqrange)
     res = dual_annealing(_obj_fn, 
-                         x0=np.array([0, 0, 0]),
+                         x0=np.array([-9, -9, -9]),
                          bounds=paras.bounds, 
                          args=(empfc, simulator_sp), 
                          maxiter=200,
                          initial_temp=5230.0,
-                         seed=24,
+                         seed=0,
                          visit=2.62,
                          no_local_search=False)
     save_res = edict()

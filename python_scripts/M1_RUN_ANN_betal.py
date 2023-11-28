@@ -7,6 +7,7 @@
 # 
 # Use Annealing
 # 
+# Try to improve beta l
 
 # ## Import some pkgs
 
@@ -105,9 +106,9 @@ _paras.beta_l = [13, 20]
 
 paras = edict()
 
-paras.band = args.band
+paras.band = "beta_l"
 paras.nepoch = args.nepoch
-paras.save_prefix = "rawfc2"
+paras.save_prefix = "rawfc2better"
 paras.freqrange =  np.linspace(_paras[paras.band][0], _paras[paras.band][1], 5)
 print(paras.freqrange)
 #paras.par_low = np.asarray([0.005,0.005,0.005,5, 0.1,0.001,0.001])
@@ -168,7 +169,7 @@ if paras.add_v != 0:
 # em FC
 fc_root = RES_ROOT/"emp_fcs2"
 def _get_fc(sub_ix, bd):
-    fil = list(fc_root.rglob(f"*{bd}*{paras.nepoch}/sub{sub_ix}.pkl"))[0]
+    fil = list(fc_root.rglob(f"*{paras.band}*{paras.nepoch}/sub{sub_ix}.pkl"))[0]
     return load_pkl(fil, verbose=False)
 
 fcs = np.array([_get_fc(sub_ix, paras.band) for sub_ix in range(36)]);
@@ -238,15 +239,37 @@ def _run_fn(sub_idx):
                            brain=brain, 
                            prior_bds=paras.prior_bds, 
                            freqrange=paras.freqrange)
-    res = dual_annealing(_obj_fn, 
+    res1 = dual_annealing(_obj_fn, 
                          x0=np.array([0, 0, 0]),
                          bounds=paras.bounds, 
                          args=(empfc, simulator_sp), 
                          maxiter=200,
                          initial_temp=5230.0,
                          seed=24,
-                         visit=2.62,
+                         visit=20,
                          no_local_search=False)
+    res2 = dual_annealing(_obj_fn, 
+                         x0=np.array([5, 5, 5]),
+                         bounds=paras.bounds, 
+                         args=(empfc, simulator_sp), 
+                         maxiter=200,
+                         initial_temp=5230.0,
+                         seed=24,
+                         visit=20,
+                         no_local_search=False)
+    res3 = dual_annealing(_obj_fn, 
+                         x0=np.array([-5, -5, -5]),
+                         bounds=paras.bounds, 
+                         args=(empfc, simulator_sp), 
+                         maxiter=200,
+                         initial_temp=5230.0,
+                         seed=24,
+                         visit=20,
+                         no_local_search=False)
+    ress = [res1, res2, res3]
+    funs = [tres.fun for tres in ress]
+    res = ress[np.argmin(funs)] # get the best results
+    
     save_res = edict()
     save_res.bestfc = simulator_sp(res.x)[1]
     save_res.ann_res = res

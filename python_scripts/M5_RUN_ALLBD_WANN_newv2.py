@@ -12,6 +12,7 @@
 
 # In[1]:
 
+print("Runing my script")
 
 import sys
 sys.path.append("../mypkg")
@@ -56,20 +57,16 @@ from constants import RES_ROOT, DATA_ROOT
 from utils.misc import load_pkl, save_pkl
 from utils.reparam import theta_raw_2out, logistic_np, logistic_torch
 
+
 import argparse
-
-
-parser = argparse.ArgumentParser(description='RUN SBIxANN')
-parser.add_argument('--band', default="alpha", type=str, help='The freq band')
+# In[ ]:
+parser = argparse.ArgumentParser(description='RUN SBIxANN allband')
+parser.add_argument('--include_beta', action="store_true", help='Whether including betal band or not')
 parser.add_argument('--nepoch', default=100, type=int, help='Emp FC epoch')
 parser.add_argument('--noise_sd', default=1.2, type=float, help='Noise sd added')
 parser.add_argument('--num_prior_sps', default=1000, type=int, help='Num of samples used for each round')
 parser.add_argument('--num_round', default=3, type=int, help='Num of train rounds')
 args = parser.parse_args()
-
-
-# In[ ]:
-
 
 
 
@@ -124,23 +121,27 @@ _paras.alpha = [8, 12]
 _paras.beta_l = [13, 20]
 
 
-# In[17]:
+# In[20]:
 
 
 paras = edict()
 
-paras.band = args.band
+paras.save_prefix = "rawfc2allbdnewv2"
+if args.include_beta:
+    paras.bands = ["delta", "theta", "alpha", "beta_l"]
+else:
+    paras.bands = ["delta", "theta", "alpha"]
+paras.freqranges =  [np.linspace(_paras[band ][0], _paras[band][1], 5) 
+                     for band in paras.bands]
 paras.nepoch = args.nepoch
-paras.save_prefix = "rawfc2"
-paras.freqrange =  np.linspace(_paras[paras.band][0], _paras[paras.band][1], 5)
-print(paras.freqrange)
+print(paras.bands)
 paras.fs = 600
 paras.num_nodes = 86 # Number of cortical (68) + subcortical nodes
 #paras.par_low = np.asarray([0.005,0.005,0.005,5, 0.1,0.001,0.001])
 #paras.par_high = np.asarray([0.03, 0.20, 0.03,20,  1,    2,  0.7])
 #paras.names = ["Taue", "Taui", "TauC", "Speed", "alpha", "gii", "gei"]
-paras.par_low = np.asarray([0.005, 5, 0.1])
-paras.par_high = np.asarray([0.03, 20, 1])
+paras.par_low = np.asarray([0.005, 6, 0.1])
+paras.par_high = np.asarray([0.03, 15, 1])
 paras.names = ["TauC", "Speed", "alpha"]
 paras.prior_bds = np.array([paras.par_low, paras.par_high]).T
 paras.prior_sd = 1
@@ -154,7 +155,7 @@ paras.SBI_paras.num_round = args.num_round # 3
 paras.SBI_paras.density_model = "nsf"
 
 
-# In[18]:
+# In[21]:
 
 
 # fn for reparemetering
@@ -170,7 +171,7 @@ _theta_raw_2out = partial(theta_raw_2out, map_fn=partial(logistic_np, k=paras.k)
 
 # ### Load the data
 
-# In[19]:
+# In[22]:
 
 
 
@@ -189,16 +190,19 @@ if paras.add_v != 0:
     ind_conn = np.transpose(np.array(ind_conn_adds), (1, 2, 0))
 
 
-# In[20]:
+# In[23]:
 
 
 # em FC
 fc_root = RES_ROOT/"emp_fcs2"
-def _get_fc(sub_ix, bd):
-    fil = list(fc_root.rglob(f"*{paras.band}*{paras.nepoch}/sub{sub_ix}.pkl"))[0]
-    return load_pkl(fil, verbose=False)
-
-fcs = np.array([_get_fc(sub_ix, paras.band) for sub_ix in range(36)]);
+fcss = []
+for band in paras.bands:
+    def _get_fc(sub_ix, bd):
+        fil = list(fc_root.rglob(f"*{bd}*{paras.nepoch}/sub{sub_ix}.pkl"))[0]
+        return load_pkl(fil, verbose=False)
+    
+    fcs = np.array([_get_fc(sub_ix, band) for sub_ix in range(36)]);
+    fcss.append(fcs)
 
 
 # In[ ]:
@@ -211,12 +215,12 @@ fcs = np.array([_get_fc(sub_ix, paras.band) for sub_ix in range(36)]);
 
 # ### Prior
 
-# In[21]:
+# In[24]:
 
 
 # get the informative prior
 def _get_prior(ind_idx):
-    fil = list(RES_ROOT.glob(f"rawfc2_ANN_{paras.band}_ep{paras.nepoch}"
+    fil = list(RES_ROOT.glob(f"{paras.save_prefix}_ANN_{'-'.join(paras.bands)}_ep{paras.nepoch}"
                              f"_addv{paras.add_v*100:.0f}/ind{ind_idx}.pkl"))[0];
     ann_res = load_pkl(fil, verbose=False);
     ann_res.ann_res.x
@@ -225,10 +229,10 @@ def _get_prior(ind_idx):
     return prior
 
 
-# In[22]:
+# In[25]:
 
 
-def simulator(raw_params, brain, noise_sd, prior_bds, freqrange):
+def simulator(raw_params, brain, noise_sd, prior_bds, freqranges):
     params = []
     for raw_param, prior_bd in zip(raw_params, prior_bds):
         param =  _map_fn_torch(raw_param)*(prior_bd[1]-prior_bd[0]) + prior_bd[0]
@@ -239,19 +243,24 @@ def simulator(raw_params, brain, noise_sd, prior_bds, freqrange):
     params_dict["tauC"] =  params[0].item()
     params_dict["speed"] =  params[1].item()
     params_dict["alpha"] =  params[2].item()
-    modelFC = build_fc_freq_m(brain , params_dict, freqrange)
-    modelFC_abs = np.abs(modelFC[:68, :68])
-    res = _minmax_vec(modelFC_abs[np.triu_indices(68, k = 1)])
-    noise =  np.random.randn(*res.shape)*noise_sd
-    return (res+ noise).flatten()
+    
+    ress = []
+    for freqrange in freqranges:
+        modelFC = build_fc_freq_m(brain, params_dict, freqrange)
+        modelFC_abs = np.abs(modelFC[:68, :68])
+        res = _minmax_vec(modelFC_abs[np.triu_indices(68, k = 1)])
+        ress.append(res)
+    ress = np.concatenate(ress)
+    noise =  np.random.randn(*ress.shape)*noise_sd
+    return (ress+ noise).flatten()
 
 
-# In[23]:
+# In[ ]:
 
 
 for cur_ind_idx in range(0, 36):
     print(cur_ind_idx)
-    save_fil = f"{paras.save_prefix}_SBIxANNBW_{paras.band}_" +                 f"ep{paras.nepoch}_" +                f"num{paras.SBI_paras.num_prior_sps}_" +                f"density{paras.SBI_paras.density_model}_" +                f"MR{paras.SBI_paras.num_round}_" +                f"noise_sd{paras.SBI_paras.noise_sd*100:.0f}_" +               f"addv{paras.add_v*100:.0f}" +               f"/ind{cur_ind_idx}.pkl"
+    save_fil = f"{paras.save_prefix}_SBIxANNALLBD_{'-'.join(paras.bands)}_" +                 f"ep{paras.nepoch}_" +                f"num{paras.SBI_paras.num_prior_sps}_" +                f"density{paras.SBI_paras.density_model}_" +                f"MR{paras.SBI_paras.num_round}_" +                f"noise_sd{paras.SBI_paras.noise_sd*100:.0f}_" +               f"addv{paras.add_v*100:.0f}" +               f"/ind{cur_ind_idx}.pkl"
     if (RES_ROOT/save_fil).exists():
         # thanks to the buggy SCS
         continue
@@ -270,15 +279,21 @@ for cur_ind_idx in range(0, 36):
                            brain=brain, 
                            noise_sd=paras.SBI_paras.noise_sd, 
                            prior_bds=paras.prior_bds, 
-                           freqrange=paras.freqrange)
+                           freqranges=paras.freqranges)
     prior = _get_prior(cur_ind_idx)
     simulator_wrapper, prior = prepare_for_sbi(simulator_sp, prior)
     inference = SNPE(prior=prior, density_estimator=paras.SBI_paras.density_model)
     proposal = prior 
     
     #the observed data
-    cur_obs_FC = np.abs(fcs[cur_ind_idx])
-    curX = torch.Tensor(_minmax_vec(cur_obs_FC[np.triu_indices(68, k = 1)]))
+    res_vecs = []
+    for fcs in fcss:
+        cur_obs_FC = np.abs(fcs[cur_ind_idx])
+        res_vec = _minmax_vec(cur_obs_FC[np.triu_indices(68, k = 1)])
+        res_vecs.append(res_vec)
+    res_vecs = np.concatenate(res_vecs)
+    curX = torch.Tensor(res_vecs)
+    #num_spss = [10000, 10000, 5000]
     for ix in range(paras.SBI_paras.num_round):
         theta, x = simulate_for_sbi(simulator_wrapper, proposal,
                                     num_simulations=int(paras.SBI_paras.num_prior_sps),
@@ -291,12 +306,6 @@ for cur_ind_idx in range(0, 36):
         proposal = posterior.set_default_x(curX)
     
     save_pkl(RES_ROOT/save_fil, proposal)
-
-
-# In[ ]:
-
-
-
 
 
 # In[ ]:
