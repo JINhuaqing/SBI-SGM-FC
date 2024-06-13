@@ -94,9 +94,14 @@ class Brain:
             type: Description of returned object.
 
         """
-        # Some other ordering that was in the original code:
-        linds = np.concatenate([np.arange(0, 34), np.arange(68, 77)])
-        rinds = np.concatenate([np.arange(34, 68), np.arange(77, 86)])
+        if self.connectome.shape[0] == 68:
+            # Some other ordering that was in the original code:
+            linds = np.arange(0, 34)
+            rinds = np.arange(34, 68)
+        else:
+            # Some other ordering that was in the original code:
+            linds = np.concatenate([np.arange(0, 34), np.arange(68, 77)])
+            rinds = np.concatenate([np.arange(34, 68), np.arange(77, 86)])
 
         q = np.maximum(
             self.connectome[linds, :][:, linds], self.connectome[rinds, :][:, rinds]
